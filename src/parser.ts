@@ -89,3 +89,21 @@ export function verdictFor(groups: Group[], botName: string): Verdict {
 
 	return 'allowed';
 }
+
+// True if the file contains Cloudflare's managed robots.txt section
+export function hasManagedBlock(text: string): boolean {
+	return /#\s*BEGIN Cloudflare Managed content/i.test(text);
+}
+
+// the value of the first Content-Signal line, or null.
+export function contentSignal(text: string): string | null {
+	for (const rawLine of text.split(/\r?\n/)) {
+		const hashIndex = rawLine.indexOf('#');
+		const line = (hashIndex === -1 ? rawLine : rawLine.slice(0, hashIndex)).trim();
+		const colonIndex = line.indexOf(':');
+		if (colonIndex === -1) continue;
+		const field = line.slice(0, colonIndex).trim().toLowerCase();
+		if (field === 'content-signal') return line.slice(colonIndex + 1).trim();
+	}
+	return null;
+}
