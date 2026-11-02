@@ -46,3 +46,46 @@ export function parseRobots(text: string): Group[] {
 
 	return groups;
 }
+
+export type Verdict = 'blocked' | 'partial' | 'allowed';
+
+// bot names may only contain letters, "-" and "_"
+// so anything like a version number is dropped.
+function productToken(agent: string): string {
+	if (agent === '*') return '*';
+	const match = agent.match(/^[a-z_-]+/);
+	return match ? match[0] : '';
+}
+
+// True if the rule covers the whole site
+// "/*" and "*" are treated like "/"
+function isRootPath(path: string): boolean {
+	return path === '/' || path === '/*' || path === '*';
+}
+
+export function verdictFor(groups: Group[], botName: string): Verdict {
+	const bot = botName.toLowerCase();
+
+	// finds the rules that apply to this bot
+	const named = groups.filter((g) => g.agents.some((a) => productToken(a) === bot));
+	const isNamed = named.length > 0;
+	const applicable = isNamed ? named : groups.filter((g) => g.agents.includes('*'));
+	const rules = applicable.flatMap((g) => g.rules);
+
+	const blocksRoot = rules.some((r) => r.type === 'disallow' && isRootPath(r.path));
+	const allowsRoot = rules.some((r) => r.type === 'allow' && isRootPath(r.path));
+
+	if (blocksRoot && !allowsRoot) {
+		// the whole site is blocked, unless some paths are allowed back
+		const allowsSome = rules.some((r) => r.type === 'allow');
+		return allowsSome ? 'partial' : 'blocked';
+	}
+
+	// when a bot's group restricts a specific path
+	// while the rest have generic * housekeeping rules.
+	if (isNamed && rules.some((r) => r.type === 'disallow' && !isRootPath(r.path))) {
+		return 'partial';
+	}
+
+	return 'allowed';
+}
