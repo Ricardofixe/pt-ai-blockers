@@ -167,7 +167,7 @@ export function buildReport(rows: SiteRow[], verdictRows: VerdictRow[], bots: Bo
 		for (const old of bots.filter((b) => b.deprecated)) {
 			const v = s.bots[old.name];
 			if (v !== 'blocked' && v !== 'partial') continue;
-			const current = bots.filter((b) => !b.deprecated && b.operator === old.operator && b.purpose === old.purpose);
+			const current = bots.filter((b) => !b.deprecated && b.operator === old.operator);
 			if (current.length > 0 && current.every((b) => s.bots[b.name] === 'allowed')) {
 				deprecatedOnly.push({ domain: s.domain, name: s.name, oldBot: old.name, currentBots: current.map((b) => b.name) });
 			}
