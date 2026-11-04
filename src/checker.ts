@@ -7,7 +7,7 @@ export type Outcome = 'ok' | 'not_found' | 'server_error' | 'unreachable' | 'cha
 
 // turns a response into an outcome
 export function classifyResponse(status: number, body: string): Outcome {
-	if (status >= 500) return 'server_error'; // treat as unkown
+	if (status >= 500) return 'server_error'; // treat as unknown
 	if (status === 401 || status === 403 || status === 429) return 'challenge'; // access refused to our checker
 	if (status >= 400) return 'not_found'; // no robots.txt means everything allowed
 	if (status >= 200 && status < 300) {
@@ -47,7 +47,7 @@ export function cleanRobots(text: string): string {
 
 // SHA-256 fingerprint of a text as 64 hex characters
 export async function sha256(text: string): Promise<string> {
-	const bytes = new TextEncoder().encode(text); // text becomrs bytes
+	const bytes = new TextEncoder().encode(text); // text becomes bytes
 	const digest = await crypto.subtle.digest('SHA-256', bytes); // bytes become a 32-byte hash
 	return [...new Uint8Array(digest)]
 		.map((b) => b.toString(16).padStart(2, '0')) // each byte becomes 2 hex characters
@@ -58,7 +58,7 @@ export async function sha256(text: string): Promise<string> {
 
 const USER_AGENT = 'pt-ai-blockers'; // identifies us
 const TIMEOUT_MS = 10_000; // give up on a site after 10 seconds
-const MAX_CHARS = 500 * 1024; // standart minnimum for crawlers
+const MAX_CHARS = 500 * 1024; // standard minimum for crawlers
 
 export interface CheckResult {
 	outcome: Outcome;

@@ -56,7 +56,7 @@ flowchart LR
 
 **Storing changes, not snapshots.** Saving every file every day would store the same thing thousands of times. Instead, each file is content-addressed by its SHA-256 hash and stored once, its verdicts are computed once, and each site's history is a set of **periods** (`first_seen`, `last_seen`) that only split when something changes. A period is only extended if the site was also seen the day before, so days the checker missed show up as gaps instead of being silently covered. Because the raw files are kept, every verdict can be recomputed after a parser fix without refetching anything.
 
-**A parser that follows RFC 9309, and only as far as needed.** The parser handles the parts real files get wrong, like a bot's own group overriding `*` entirely, merging repeated groups for the same bot, case-insensitive names, version suffixes (`GPTBot/1.1`), comments anywhere, empty values, and Windows line endings. Ambiguous cases the RFC doesn't settle are documented decisions: an empty `User-agent:` starts a group that matches no bot (so one typo can't turn into "blocks everyone"), and `Crawl-delay` ends a list of user agents.
+**A parser that follows RFC 9309.** The parser handles the parts real files get wrong, like a bot's own group overriding `*` entirely, merging repeated groups for the same bot, case-insensitive names, version suffixes (`GPTBot/1.1`), comments anywhere, empty values, and Windows line endings. Ambiguous cases the RFC doesn't settle are documented decisions: an empty `User-agent:` starts a group that matches no bot (so one typo can't turn into "blocks everyone"), and `Crawl-delay` ends a list of user agents.
 
 **"Unknown" is not "no".** A bot-check page, an error or a timeout says nothing about a site's AI policy, so those sites are counted separately and left out of every percentage, rather than quietly counted as "allows everything". Dropping them from the sample would bias it, since sites with aggressive bot protection are likely also the ones blocking AI. The same rule runs through the data, where `NULL` means "couldn't check" and is never stored as `0`. A response only counts as a robots.txt if it looks like one, so a JSON error or an HTML page served with a 200 can't be misread as an empty file.
 
@@ -103,7 +103,7 @@ Open `/__scheduled` once per batch (three times for all sites), then open the ro
 
 ## Tests
 
-66 unit tests, written before the code they cover:
+66 unit tests, written mostly before the code they cover:
 
 - **Parser:** every grouping rule above, plus messy input (comments inside paths, `\r\n`, garbage lines, colons in paths, wildcards kept verbatim).
 - **Verdicts:** named group vs `*`, merged groups, version suffixes, exact-name matching (`Applebot` ≠ `Applebot-Extended`), the RFC's tie rule (`Allow: /` cancels `Disallow: /`).
