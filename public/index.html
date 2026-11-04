@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>PT AI Blockers</title>
+		<meta name="description" content="A daily check of how Portuguese websites treat AI crawlers in their robots.txt." />
+		<style>
+			:root {
+				color-scheme: light;
+				--page: #f9f9f7;
+				--surface: #fcfcfb;
+				--text: #0b0b0b;
+				--text-2: #52514e;
+				--muted: #898781;
+				--hairline: #e1e0d9;
+				--border: rgba(11, 11, 11, 0.1);
+				/* Verdicts: one blue ramp, darker = stronger. "Allowed" is neutral gray (no action). */
+				--blocked: #1c5cab;
+				--partial: #6da7ec;
+				--allowed: #e1e0d9;
+				--accent: #1c5cab;
+			}
+			@media (prefers-color-scheme: dark) {
+				:root:not([data-theme='light']) {
+					color-scheme: dark;
+					--page: #0d0d0d;
+					--surface: #1a1a19;
+					--text: #f0efec;
+					--text-2: #c3c2b7;
+					--muted: #898781;
+					--hairline: #2c2c2a;
+					--border: rgba(255, 255, 255, 0.1);
+					--blocked: #86b6ef;
+					--partial: #256abf;
+					--allowed: #383835;
+					--accent: #86b6ef;
+				}
+			}
+			:root[data-theme='dark'] {
+				color-scheme: dark;
+				--page: #0d0d0d;
+				--surface: #1a1a19;
+				--text: #f0efec;
+				--text-2: #c3c2b7;
+				--muted: #898781;
+				--hairline: #2c2c2a;
+				--border: rgba(255, 255, 255, 0.1);
+				--blocked: #86b6ef;
+				--partial: #256abf;
+				--allowed: #383835;
+				--accent: #86b6ef;
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+			[hidden] {
+				display: none !important;
+			} /* so "hidden" wins over display rules like flex */
+			body {
+				margin: 0;
+				background: var(--page);
+				color: var(--text);
+				font:
+					16px/1.5 system-ui,
+					-apple-system,
+					'Segoe UI',
+					sans-serif;
+			}
+			main {
+				max-width: 1040px;
+				margin: 0 auto;
+				padding: 40px 16px 64px;
+			}
+			h1 {
+				font-size: 28px;
+				line-height: 1.2;
+				margin: 0 0 8px;
+				font-weight: 650;
+			}
+			h2 {
+				font-size: 18px;
+				margin: 0 0 4px;
+				font-weight: 600;
+			}
+			.lede {
+				color: var(--text-2);
+				margin: 0;
+				max-width: 680px;
+			}
+			.note {
+				color: var(--text-2);
+				font-size: 14px;
+				margin: 0 0 16px;
+			}
+			section {
+				margin-top: 40px;
+			}
+			.card {
+				background: var(--surface);
+				border: 1px solid var(--border);
+				border-radius: 12px;
+				padding: 20px;
+			}
+			a {
+				color: var(--accent);
+			}
+
+			/* Headline */
+			.headline {
+				display: grid;
+				grid-template-columns: 1.4fr 1fr 1fr;
+				gap: 16px;
+				margin-top: 28px;
+			}
+			.hero-value {
+				font-size: 56px;
+				font-weight: 650;
+				line-height: 1;
+				margin: 6px 0 8px;
+			}
+			.tile-value {
+				font-size: 28px;
+				font-weight: 600;
+				line-height: 1.1;
+				margin: 6px 0 6px;
+			}
+			.tile-label {
+				font-size: 14px;
+				color: var(--text-2);
+				margin: 0;
+			}
+			.tile-sub {
+				font-size: 13px;
+				color: var(--muted);
+				margin: 0;
+			}
+			@media (max-width: 760px) {
+				.headline {
+					grid-template-columns: 1fr;
+				}
+			}
+
+			/* Legend */
+			.legend {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 16px;
+				font-size: 13px;
+				color: var(--text-2);
+				margin: 0 0 16px;
+				padding: 0;
+				list-style: none;
+			}
+			.legend li {
+				display: flex;
+				align-items: center;
+				gap: 6px;
+			}
+			.swatch {
+				width: 12px;
+				height: 12px;
+				border-radius: 3px;
+				flex: none;
+			}
+			.sw-blocked {
+				background: var(--blocked);
+			}
+			.sw-partial {
+				background: var(--partial);
+			}
+			.sw-allowed {
+				background: var(--allowed);
+			}
+
+			/* Segmented bars split into blocked / partial / allowed */
+			.bar {
+				display: flex;
+				gap: 2px;
+				height: 8px;
+				border-radius: 4px;
+				min-width: 80px;
+			}
+			.bar.tall {
+				height: 12px;
+			}
+			.seg {
+				height: 100%;
+				border-radius: 4px;
+				cursor: default;
+				outline-offset: 2px;
+			}
+			.seg:hover,
+			.seg:focus-visible {
+				filter: brightness(1.12);
+			}
+			.seg-blocked {
+				background: var(--blocked);
+			}
+			.seg-partial {
+				background: var(--partial);
+			}
+			.seg-allowed {
+				background: var(--allowed);
+			}
+
+			.purpose-rows {
+				display: grid;
+				gap: 18px;
+			}
+			.purpose-row {
+				display: grid;
+				grid-template-columns: 180px 1fr 220px;
+				gap: 16px;
+				align-items: center;
+			}
+			.purpose-name {
+				font-weight: 600;
+			}
+			.purpose-desc {
+				display: block;
+				font-size: 13px;
+				color: var(--muted);
+				font-weight: 400;
+			}
+			.purpose-nums {
+				font-size: 14px;
+				color: var(--text-2);
+				font-variant-numeric: tabular-nums;
+			}
+			@media (max-width: 760px) {
+				.purpose-row {
+					grid-template-columns: 1fr;
+					gap: 6px;
+				}
+			}
+
+			/* Tables */
+			.table-wrap {
+				overflow-x: auto;
+			}
+			table {
+				border-collapse: collapse;
+				width: 100%;
+				font-size: 14px;
+			}
+			th {
+				text-align: left;
+				font-weight: 600;
+				color: var(--text-2);
+				font-size: 13px;
+				padding: 8px 12px;
+				border-bottom: 1px solid var(--hairline);
+				white-space: nowrap;
+			}
+			td {
+				padding: 10px 12px;
+				border-bottom: 1px solid var(--hairline);
+				vertical-align: middle;
+			}
+			tr:last-child td {
+				border-bottom: none;
+			}
+			td.num {
+				font-variant-numeric: tabular-nums;
+				color: var(--text-2);
+				white-space: nowrap;
+			}
+			.cell-bar {
+				display: grid;
+				grid-template-columns: minmax(80px, 1fr) auto;
+				gap: 10px;
+				align-items: center;
+				min-width: 160px;
+			}
+			.cell-bar span {
+				font-variant-numeric: tabular-nums;
+				color: var(--text-2);
+				font-size: 13px;
+				white-space: nowrap;
+			}
+			.group-row td {
+				font-weight: 600;
+				color: var(--text-2);
+				font-size: 13px;
+				padding-top: 18px;
+				text-transform: capitalize;
+			}
+			.old {
+				font-size: 12px;
+				color: var(--muted);
+				margin-left: 6px;
+			}
+			.domain {
+				font-size: 12px;
+				color: var(--muted);
+				display: block;
+			}
+
+			/* Verdict labels: a colored dot carries identity, the text stays in text colors */
+			.v {
+				display: inline-flex;
+				align-items: center;
+				gap: 6px;
+				white-space: nowrap;
+			}
+			.v::before {
+				content: '';
+				width: 8px;
+				height: 8px;
+				border-radius: 50%;
+				background: var(--dot, transparent);
+				border: 1px solid var(--border);
+			}
+			.v-blocked {
+				--dot: var(--blocked);
+			}
+			.v-partial {
+				--dot: var(--partial);
+			}
+			.v-allowed {
+				--dot: var(--allowed);
+				color: var(--text-2);
+			}
+			.v-unknown {
+				color: var(--muted);
+			}
+			.v-unknown::before {
+				display: none;
+			}
+
+			/* Filters */
+			.filters {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 12px;
+				margin-bottom: 16px;
+			}
+			.filters input,
+			.filters select {
+				font: inherit;
+				font-size: 14px;
+				color: var(--text);
+				background: var(--surface);
+				border: 1px solid var(--border);
+				border-radius: 8px;
+				padding: 8px 10px;
+				min-width: 0;
+			}
+			.filters input {
+				flex: 1 1 220px;
+			}
+
+			.callout {
+				border-left: 3px solid var(--accent);
+			}
+			.callout ul {
+				margin: 8px 0 0;
+				padding-left: 20px;
+			}
+			.method {
+				color: var(--text-2);
+				font-size: 15px;
+			}
+			.method li {
+				margin-bottom: 8px;
+			}
+			footer {
+				margin-top: 48px;
+				color: var(--muted);
+				font-size: 13px;
+			}
+
+			/* Tooltip */
+			.tip {
+				position: fixed;
+				pointer-events: none;
+				z-index: 10;
+				display: none;
+				background: var(--surface);
+				color: var(--text);
+				border: 1px solid var(--border);
+				border-radius: 8px;
+				padding: 8px 10px;
+				font-size: 13px;
+				box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+			}
+			.tip strong {
+				display: block;
+				font-size: 14px;
+			}
+			.tip span {
+				color: var(--text-2);
+			}
+
+			.status {
+				color: var(--muted);
+			}
+
+			/* "Show all" button under long lists */
+			.more {
+				font: inherit;
+				font-size: 14px;
+				color: var(--accent);
+				background: none;
+				border: 1px solid var(--border);
+				border-radius: 8px;
+				padding: 6px 12px;
+				margin-top: 12px;
+				cursor: pointer;
+			}
+			.more:hover {
+				background: var(--surface);
+			}
+
+			/* Cloudflare section */
+			h3 {
+				font-size: 15px;
+				margin: 0 0 4px;
+				font-weight: 600;
+			}
+			.cf-grid {
+				display: grid;
+				grid-template-columns: 1fr 1fr;
+				gap: 16px;
+				margin-top: 16px;
+			}
+			@media (max-width: 760px) {
+				.cf-grid {
+					grid-template-columns: 1fr;
+				}
+			}
+			.name-list {
+				list-style: none;
+				margin: 12px 0 0;
+				padding: 0;
+			}
+			.name-list li {
+				padding: 8px 0;
+				border-bottom: 1px solid var(--hairline);
+				display: flex;
+				flex-wrap: wrap;
+				justify-content: space-between;
+				gap: 4px 12px;
+			}
+			.name-list li:last-child {
+				border-bottom: none;
+			}
+			.name-list .meta {
+				font-size: 13px;
+				color: var(--muted);
+			}
+			.signal {
+				font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+				font-size: 12px;
+				color: var(--text-2);
+			}
+			.empty {
+				color: var(--muted);
+				font-size: 14px;
+				margin: 12px 0 0;
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<header>
+				<h1>How Portuguese websites treat AI bots</h1>
+				<p class="lede" id="lede">Loading the latest check…</p>
+			</header>
+
+			<div class="headline" id="headline"></div>
+
+			<section>
+				<h2>By purpose</h2>
+				<p class="note">Share of sites that block at least one bot of each kind. Out of the sites whose robots.txt we could read.</p>
+				<ul class="legend" aria-label="Legend">
+					<li><span class="swatch sw-blocked"></span>Blocked</li>
+					<li><span class="swatch sw-partial"></span>Partly blocked</li>
+					<li><span class="swatch sw-allowed"></span>Allowed</li>
+				</ul>
+				<div class="card purpose-rows" id="purposes"></div>
+			</section>
+
+			<section id="old-names" hidden>
+				<div class="card callout">
+					<h2>Blocking names that no longer exist</h2>
+					<p class="note" style="margin: 0">
+						These sites block an AI company's old bot name, but not its current one, so the bot they meant to stop is still allowed.
+					</p>
+					<ul id="old-list"></ul>
+				</div>
+			</section>
+
+			<section>
+				<h2>By sector</h2>
+				<p class="note">Percentages show the share of each sector's readable sites that fully block at least one bot of that kind.</p>
+				<div class="card table-wrap"><table id="sectors"></table></div>
+			</section>
+
+			<section>
+				<h2>Cloudflare</h2>
+				<p class="note">
+					Does being on Cloudflare go with blocking AI training? Readable sites, split by whether they're served through Cloudflare. The
+					groups are small, so read this as a hint, not a rule.
+				</p>
+				<div class="card purpose-rows" id="cf-compare"></div>
+				<div class="cf-grid">
+					<div class="card">
+						<h3>Using Cloudflare's managed robots.txt</h3>
+						<p class="note" style="margin: 0">
+							Cloudflare can write the AI rules into a site's robots.txt automatically. Shown with the site's Content-Signal, where it has
+							one.
+						</p>
+						<ul class="name-list" id="cf-managed"></ul>
+					</div>
+					<div class="card">
+						<h3>On Cloudflare, but not blocking AI training</h3>
+						<p class="note" style="margin: 0">
+							These sites could block AI training bots with one Cloudflare setting, but their robots.txt doesn't. They may still block bots
+							at the network level, which robots.txt can't show.
+						</p>
+						<ul class="name-list" id="cf-open"></ul>
+					</div>
+				</div>
+			</section>
+
+			<section>
+				<h2>By bot</h2>
+				<p class="note">How many sites block, partly block or allow each bot.</p>
+				<div class="card table-wrap">
+					<table id="bots"></table>
+					<div id="bots-more"></div>
+				</div>
+			</section>
+
+			<section>
+				<h2>Every site</h2>
+				<div class="filters">
+					<input id="search" type="search" placeholder="Search sites" aria-label="Search sites" />
+					<select id="sector-filter" aria-label="Filter by sector">
+						<option value="">All sectors</option>
+					</select>
+				</div>
+				<div class="card table-wrap">
+					<table id="sites"></table>
+					<div id="sites-more"></div>
+				</div>
+			</section>
+
+			<section>
+				<h2>How this works</h2>
+				<div class="card method">
+					<ul>
+						<li>
+							<strong>What is checked.</strong> Once a day, each site's <code>/robots.txt</code> is fetched and read the way the robots.txt
+							standard (RFC 9309) describes. This measures what sites <em>ask</em> AI bots to do, not what the bots actually do: some bots
+							that act on a user's request say robots.txt may not apply to them.
+						</li>
+						<li>
+							<strong>Blocked, partly blocked, allowed.</strong> Blocked: the bot may not access the site's root (<code>/</code>) and
+							nothing is allowed back. Partly blocked: the root is blocked but some paths are allowed back, or the bot's own rules block
+							specific sections. Generic rules for all bots (like <code>/admin/</code>) don't count.
+						</li>
+						<li>
+							<strong>Purposes.</strong> Training bots collect content to train AI models. Search bots index pages so AI search tools can
+							cite them. User bots fetch a page live because someone asked an AI assistant. Each bot's purpose comes from its operator's
+							documentation. A site counts as blocking a purpose if it blocks at least one current bot of that kind. Old bot names are
+							reported separately.
+						</li>
+						<li>
+							<strong>Unknown sites are left out of percentages.</strong> If a site returned an error, couldn't be reached, or answered with
+							something other than a robots.txt (often a bot check), we can't know its policy, so it's counted separately instead of as
+							"allowed". A site with no robots.txt at all (404) counts as allowing every bot, as the standard says.
+						</li>
+						<li>
+							<strong>Cloudflare.</strong> A site counts as using Cloudflare if its response carries Cloudflare's
+							<code>cf-ray</code> header. "Managed robots.txt" means the file contains the section Cloudflare adds automatically for its
+							customers.
+						</li>
+						<li>
+							<strong>Sample.</strong> Around 70 Portuguese sites: national news media, broadcasters, sports media and clubs, tech and
+							lifestyle sites, universities and public institutions. Percentages from small groups can move a lot when one site changes.
+						</li>
+					</ul>
+				</div>
+			</section>
+
+			<footer><a href="/api/sites.csv">Download the data (CSV)</a> · <a href="/api/summary">JSON</a></footer>
+		</main>
+
+		<div class="tip" id="tip" role="tooltip"></div>
+
+		<script>
+			const PURPOSES = [
+				{ key: 'training', name: 'AI training', desc: 'Collect content to train models' },
+				{ key: 'search', name: 'AI search', desc: 'Index pages so AI search can cite them' },
+				{ key: 'user', name: 'User requests', desc: 'Fetch a page when someone asks an AI' },
+			];
+			const VERDICT_LABEL = { blocked: 'Blocked', partial: 'Partly blocked', allowed: 'Allowed' };
+			const OUTCOME_LABEL = {
+				ok: 'Read',
+				not_found: 'No robots.txt',
+				challenge: 'Not a robots.txt / refused',
+				server_error: 'Server error',
+				unreachable: 'Unreachable',
+				not_checked: 'Not checked yet',
+			};
+			const SECTOR_LABEL = {
+				news: 'News',
+				broadcast: 'TV & radio',
+				sports: 'Sports',
+				tech_lifestyle: 'Tech & lifestyle',
+				university: 'Universities',
+				government: 'Public institutions',
+			};
+
+			// Builds an element. All data goes in through textContent, never innerHTML:
+			// some of it (like Content-Signal values) comes from the websites themselves.
+			function el(tag, props = {}, children = []) {
+				const node = document.createElement(tag);
+				for (const [key, value] of Object.entries(props)) {
+					if (key === 'text') node.textContent = value;
+					else if (key === 'class') node.className = value;
+					else if (key.startsWith('aria-') || ['role', 'tabindex', 'href', 'colspan'].includes(key)) node.setAttribute(key, value);
+					else node[key] = value;
+				}
+				for (const child of [].concat(children)) if (child) node.append(child);
+				return node;
+			}
+			const pct = (part, whole) => (whole === 0 ? '–' : `${Math.round((100 * part) / whole)}%`);
+			const total = (c) => c.blocked + c.partial + c.allowed;
+
+			// Tooltip: one element, filled on hover or keyboard focus
+			const tip = document.getElementById('tip');
+			function showTip(event, title, detail) {
+				tip.replaceChildren(el('strong', { text: title }), el('span', { text: detail }));
+				tip.style.display = 'block';
+				const rect = event.target.getBoundingClientRect();
+				const x = event.clientX ?? rect.left + rect.width / 2;
+				const y = event.clientY ?? rect.top;
+				tip.style.left = `${Math.min(x + 12, window.innerWidth - tip.offsetWidth - 8)}px`;
+				tip.style.top = `${y - tip.offsetHeight - 12}px`;
+			}
+			const hideTip = () => (tip.style.display = 'none');
+
+			// A segmented bar: blocked | partial | allowed, widths proportional to the counts
+			function segmentedBar(counts, label, tall = false) {
+				const whole = total(counts);
+				const bar = el('div', {
+					class: tall ? 'bar tall' : 'bar',
+					role: 'img',
+					'aria-label': `${label}: ${counts.blocked} blocked, ${counts.partial} partly blocked, ${counts.allowed} allowed`,
+				});
+				if (whole === 0) return bar;
+				for (const key of ['blocked', 'partial', 'allowed']) {
+					if (counts[key] === 0) continue;
+					const detail = `${counts[key]} of ${whole} sites (${pct(counts[key], whole)})`;
+					const seg = el('div', { class: `seg seg-${key}`, tabindex: '0', 'aria-label': `${VERDICT_LABEL[key]}: ${detail}` });
+					seg.style.flex = String(counts[key]);
+					seg.addEventListener('pointermove', (e) => showTip(e, `${VERDICT_LABEL[key]} · ${label}`, detail));
+					seg.addEventListener('focus', (e) => showTip(e, `${VERDICT_LABEL[key]} · ${label}`, detail));
+					seg.addEventListener('pointerleave', hideTip);
+					seg.addEventListener('blur', hideTip);
+					bar.append(seg);
+				}
+				return bar;
+			}
+
+			// Shows only the first `limit` entries of a list, with a button to show the rest.
+			// `items` are table rows or list items; group-heading rows don't count as entries.
+			function collapsible(items, limit = 7) {
+				const isGroup = (item) => item.classList.contains('group-row');
+				const entries = items.filter((item) => !isGroup(item)).length;
+				if (entries <= limit) return null; // short enough: no button
+				let expanded = false;
+				const button = el('button', { class: 'more', type: 'button' });
+				const apply = () => {
+					let seen = 0;
+					for (const item of items) {
+						if (!isGroup(item)) seen++;
+						// a group heading hides once its first entry would be hidden
+						item.hidden = !expanded && (isGroup(item) ? seen >= limit : seen > limit);
+					}
+					button.textContent = expanded ? 'Show fewer' : `Show all ${entries}`;
+					button.setAttribute('aria-expanded', String(expanded));
+				};
+				button.addEventListener('click', () => {
+					expanded = !expanded;
+					apply();
+				});
+				apply();
+				return button;
+			}
+
+			// A list of sites (name + extra text), collapsed to 7, or a short message if empty
+			function siteList(listId, sites, extra, emptyText) {
+				const list = document.getElementById(listId);
+				if (sites.length === 0) {
+					list.replaceWith(el('p', { class: 'empty', text: emptyText }));
+					return;
+				}
+				const items = sites.map((x) =>
+					el('li', {}, [
+						el('a', { href: `https://${x.domain}/robots.txt`, text: x.name }),
+						el('span', { class: extra(x).signal ? 'signal' : 'meta', text: extra(x).text }),
+					]),
+				);
+				list.replaceChildren(...items);
+				const button = collapsible(items);
+				if (button) list.after(button);
+			}
+
+			function verdictLabel(v) {
+				if (!v) return el('span', { class: 'v v-unknown', text: '—' });
+				return el('span', { class: `v v-${v}`, text: v === 'partial' ? 'Partly' : VERDICT_LABEL[v] });
+			}
+
+			function tile(label, value, sub, hero = false) {
+				return el('div', { class: 'card' }, [
+					el('p', { class: 'tile-label', text: label }),
+					el('p', { class: hero ? 'hero-value' : 'tile-value', text: value }),
+					el('p', { class: 'tile-sub', text: sub }),
+				]);
+			}
+
+			function render(r) {
+				const known = r.totals.known;
+				const unknownCount = r.totals.sites - known;
+				const date = r.checkedOn
+					? new Date(`${r.checkedOn}T00:00:00Z`).toLocaleDateString('en-GB', {
+							day: 'numeric',
+							month: 'long',
+							year: 'numeric',
+							timeZone: 'UTC',
+						})
+					: 'not yet';
+				document.getElementById('lede').textContent =
+					`A daily check of the robots.txt files of ${r.totals.sites} Portuguese websites. Last checked ${date}. ` +
+					`${known} sites could be read; ${unknownCount} couldn't and are left out of the percentages.`;
+
+				// Headline: one hero number, two supporting tiles
+				const t = r.byPurpose.training,
+					s = r.byPurpose.search;
+				document
+					.getElementById('headline')
+					.replaceChildren(
+						tile(
+							'Block at least one AI training bot',
+							pct(t.blocked, known),
+							`${t.blocked} of ${known} sites · ${t.partial} more partly`,
+							true,
+						),
+						tile('Block at least one AI search bot', pct(s.blocked, known), `${s.blocked} of ${known} sites · ${s.partial} more partly`),
+						tile(
+							'Served through Cloudflare',
+							`${r.cloudflare.yes} of ${r.cloudflare.yes + r.cloudflare.no}`,
+							`${r.managedBlock} use Cloudflare's managed robots.txt`,
+						),
+					);
+
+				// By purpose
+				document.getElementById('purposes').replaceChildren(
+					...PURPOSES.map((p) => {
+						const c = r.byPurpose[p.key];
+						return el('div', { class: 'purpose-row' }, [
+							el('div', { class: 'purpose-name', text: p.name }, [el('span', { class: 'purpose-desc', text: p.desc })]),
+							segmentedBar(c, p.name, true),
+							el('div', { class: 'purpose-nums', text: `${pct(c.blocked, total(c))} blocked · ${pct(c.partial, total(c))} partly` }),
+						]);
+					}),
+				);
+
+				// Old names
+				if (r.deprecatedOnly.length > 0) {
+					document.getElementById('old-names').hidden = false;
+					document
+						.getElementById('old-list')
+						.replaceChildren(
+							...r.deprecatedOnly.map((d) =>
+								el('li', { text: `${d.name} blocks ${d.oldBot}, but ${d.currentBots.join(' and ')} is allowed` }),
+							),
+						);
+				}
+
+				// By sector
+				const sectorTable = document.getElementById('sectors');
+				sectorTable.replaceChildren(
+					el(
+						'thead',
+						{},
+						el('tr', {}, [
+							el('th', { text: 'Sector' }),
+							el('th', { text: 'Readable' }),
+							el('th', { text: 'Cloudflare' }),
+							...PURPOSES.map((p) => el('th', { text: p.name })),
+						]),
+					),
+					el(
+						'tbody',
+						{},
+						r.bySector.map((sec) =>
+							el('tr', {}, [
+								el('td', { text: SECTOR_LABEL[sec.sector] ?? sec.sector }),
+								el('td', { class: 'num', text: `${sec.known} of ${sec.sites}` }),
+								el('td', { class: 'num', text: `${sec.cloudflare} of ${sec.sites}` }),
+								...PURPOSES.map((p) => {
+									const c = sec.purposes[p.key];
+									return el(
+										'td',
+										{},
+										el('div', { class: 'cell-bar' }, [
+											segmentedBar(c, `${SECTOR_LABEL[sec.sector] ?? sec.sector}, ${p.name}`),
+											el('span', { text: pct(c.blocked, total(c)) }),
+										]),
+									);
+								}),
+							]),
+						),
+					),
+				);
+
+				// Cloudflare
+				const cf = r.cloudflareInsight;
+				document.getElementById('cf-compare').replaceChildren(
+					...[
+						['Behind Cloudflare', cf.behind],
+						['Not behind Cloudflare', cf.notBehind],
+					].map(([name, group]) =>
+						el('div', { class: 'purpose-row' }, [
+							el('div', { class: 'purpose-name', text: name }, [
+								el('span', { class: 'purpose-desc', text: `${group.sites} readable sites` }),
+							]),
+							segmentedBar(group.training, `${name}, AI training`, true),
+							el('div', {
+								class: 'purpose-nums',
+								text: `${pct(group.training.blocked, group.sites)} block AI training · ${pct(group.training.partial, group.sites)} partly`,
+							}),
+						]),
+					),
+				);
+				siteList(
+					'cf-managed',
+					cf.managed,
+					(x) => (x.contentSignal ? { text: x.contentSignal, signal: true } : { text: SECTOR_LABEL[x.sector] ?? x.sector }),
+					'No site uses it yet.',
+				);
+				siteList(
+					'cf-open',
+					cf.openOnCloudflare,
+					(x) => ({ text: SECTOR_LABEL[x.sector] ?? x.sector }),
+					'Every readable site on Cloudflare blocks at least one AI training bot.',
+				);
+
+				// By bot, grouped by purpose
+				const botRows = [];
+				for (const p of PURPOSES) {
+					botRows.push(el('tr', { class: 'group-row' }, el('td', { colspan: '4', text: p.name })));
+					for (const b of r.byBot.filter((b) => b.purpose === p.key)) {
+						botRows.push(
+							el('tr', {}, [
+								el('td', { text: b.name }, b.deprecated ? [el('span', { class: 'old', text: 'old name' })] : []),
+								el('td', { class: 'num', text: b.operator }),
+								el(
+									'td',
+									{},
+									el('div', { class: 'cell-bar' }, [
+										segmentedBar(b.counts, b.name),
+										el('span', { text: pct(b.counts.blocked, total(b.counts)) }),
+									]),
+								),
+								el('td', { class: 'num', text: `${b.counts.blocked} · ${b.counts.partial} · ${b.counts.allowed}` }),
+							]),
+						);
+					}
+				}
+				document
+					.getElementById('bots')
+					.replaceChildren(
+						el(
+							'thead',
+							{},
+							el('tr', {}, [
+								el('th', { text: 'Bot' }),
+								el('th', { text: 'Operator' }),
+								el('th', { text: 'Blocked' }),
+								el('th', { text: 'Blocked · partly · allowed' }),
+							]),
+						),
+						el('tbody', {}, botRows),
+					);
+				document.getElementById('bots-more').replaceChildren(...[collapsible(botRows)].filter(Boolean));
+
+				// Every site, with filters
+				const select = document.getElementById('sector-filter');
+				for (const sec of r.bySector) select.append(el('option', { value: sec.sector, text: SECTOR_LABEL[sec.sector] ?? sec.sector }));
+				const search = document.getElementById('search');
+				const siteTable = document.getElementById('sites');
+				const sitesMore = document.getElementById('sites-more');
+				let sitesExpanded = false;
+				const SITE_LIMIT = 7;
+				const drawSites = () => {
+					const q = search.value.trim().toLowerCase();
+					const matches = r.sites.filter(
+						(x) => (!select.value || x.sector === select.value) && (!q || x.name.toLowerCase().includes(q) || x.domain.includes(q)),
+					);
+					// While searching, show every match; otherwise the first 7 unless expanded
+					const rows = sitesExpanded || q ? matches : matches.slice(0, SITE_LIMIT);
+					const button = el('button', { class: 'more', type: 'button', text: sitesExpanded ? 'Show fewer' : `Show all ${matches.length}` });
+					button.setAttribute('aria-expanded', String(sitesExpanded));
+					button.addEventListener('click', () => {
+						sitesExpanded = !sitesExpanded;
+						drawSites();
+					});
+					sitesMore.replaceChildren(...(matches.length > SITE_LIMIT && !q ? [button] : []));
+					siteTable.replaceChildren(
+						el(
+							'thead',
+							{},
+							el('tr', {}, [
+								el('th', { text: 'Site' }),
+								el('th', { text: 'Sector' }),
+								el('th', { text: 'robots.txt' }),
+								el('th', { text: 'Cloudflare' }),
+								...PURPOSES.map((p) => el('th', { text: p.name })),
+							]),
+						),
+						el(
+							'tbody',
+							{},
+							rows.map((x) =>
+								el('tr', {}, [
+									el('td', {}, [
+										el('a', { href: `https://${x.domain}/robots.txt`, text: x.name }),
+										el('span', { class: 'domain', text: x.domain }),
+									]),
+									el('td', { class: 'num', text: SECTOR_LABEL[x.sector] ?? x.sector }),
+									el('td', {
+										class: x.known ? 'num' : 'num status',
+										text: OUTCOME_LABEL[x.outcome] + (x.managedBlock ? ' · managed' : ''),
+									}),
+									el('td', { class: 'num', text: x.isCloudflare === null ? '—' : x.isCloudflare ? 'Yes' : 'No' }),
+									...PURPOSES.map((p) => el('td', {}, verdictLabel(x.purposes[p.key]))),
+								]),
+							),
+						),
+					);
+				};
+				search.addEventListener('input', drawSites);
+				select.addEventListener('change', drawSites);
+				drawSites();
+			}
+
+			fetch('/api/summary')
+				.then((res) => {
+					if (!res.ok) throw new Error(`HTTP ${res.status}`);
+					return res.json();
+				})
+				.then(render)
+				.catch((err) => {
+					document.getElementById('lede').textContent = `Couldn't load the data (${err.message}).`;
+				});
+		</script>
+	</body>
+</html>
