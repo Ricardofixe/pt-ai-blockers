@@ -82,7 +82,7 @@ export function verdictFor(groups: Group[], botName: string): Verdict {
 	}
 
 	// when a bot's group restricts a specific path
-	// while the rest have generic * housekeeping rules.
+	// while the rest have generic * housekeeping rules
 	if (isNamed && rules.some((r) => r.type === 'disallow' && !isRootPath(r.path))) {
 		return 'partial';
 	}
