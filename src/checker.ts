@@ -63,12 +63,79 @@ const MAX_CHARS = 500 * 1024; // standard minimum for crawlers
 export interface CheckResult {
 	outcome: Outcome;
 	httpStatus: number | null; // null if we got no response
-	isCloudflare: boolean | null; // null if we had no headers to check
+	isCloudflare: boolean | null; // null if the DNS lookup failed
 	body: string | null; // the cleaned robots.txt
+}
+
+// Cloudflare detection
+
+// Cloudflare's published IPv4 ranges https://www.cloudflare.com/ips/
+const CLOUDFLARE_RANGES = [
+	'173.245.48.0/20',
+	'103.21.244.0/22',
+	'103.22.200.0/22',
+	'103.31.4.0/22',
+	'141.101.64.0/18',
+	'108.162.192.0/18',
+	'190.93.240.0/20',
+	'188.114.96.0/20',
+	'197.234.240.0/22',
+	'198.41.128.0/17',
+	'162.158.0.0/15',
+	'104.16.0.0/13',
+	'104.24.0.0/14',
+	'172.64.0.0/13',
+	'131.0.72.0/22',
+];
+
+// "104.16.1.1" becomes one 32-bit number, null if it isn't a valid IPv4 address
+function ipToNumber(ip: string): number | null {
+	const parts = ip.split('.').map(Number);
+	if (parts.length !== 4 || parts.some((p) => !Number.isInteger(p) || p < 0 || p > 255)) return null;
+	return ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0;
+}
+
+// true if the IPv4 address is inside one of Cloudflare's ranges
+export function isCloudflareIp(ip: string): boolean {
+	const n = ipToNumber(ip);
+	if (n === null) return false;
+	return CLOUDFLARE_RANGES.some((range) => {
+		const [base, bits] = range.split('/');
+		const mask = (~0 << (32 - Number(bits))) >>> 0; // e.g. /13 keeps the first 13 bits
+		return (n & mask) >>> 0 === (ipToNumber(base)! & mask) >>> 0;
+	});
+}
+
+// true / false if the site's addresses are / aren't Cloudflare's, null if we couldn't tell
+export function cloudflareFromIps(ips: string[] | null): boolean | null {
+	if (ips === null || ips.length === 0) return null;
+	return ips.some(isCloudflareIp);
+}
+
+// looks up a hostname's IPv4 addresses with DNS-over-HTTPS
+export async function resolveIPv4(domain: string): Promise<string[] | null> {
+	try {
+		const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=A`, {
+			headers: { accept: 'application/dns-json' },
+			signal: AbortSignal.timeout(TIMEOUT_MS),
+		});
+		if (!res.ok) return null;
+		const data = (await res.json()) as {
+			Status: number;
+			Answer?: { type: number; data: string }[];
+		};
+		if (data.Status !== 0) return null; // 0 = the lookup succeeded
+		return (data.Answer ?? []).filter((a) => a.type === 1).map((a) => a.data); // type 1 = an IPv4 (A) record
+	} catch {
+		return null;
+	}
 }
 
 // fetches https://<domain>/robots.txt and describes what came back
 export async function checkSite(domain: string): Promise<CheckResult> {
+	// look up the site's addresses at the same time as fetching robots.txt
+	const cloudflare = resolveIPv4(domain).then(cloudflareFromIps);
+
 	let response: Response;
 	try {
 		response = await fetch(`https://${domain}/robots.txt`, {
@@ -78,11 +145,16 @@ export async function checkSite(domain: string): Promise<CheckResult> {
 		});
 	} catch {
 		// timeout, DNS failure, refused connection...
-		return { outcome: 'unreachable', httpStatus: null, isCloudflare: null, body: null };
+		return {
+			outcome: 'unreachable',
+			httpStatus: null,
+			isCloudflare: await cloudflare,
+			body: null,
+		};
 	}
 
 	const httpStatus = response.status;
-	const isCloudflare = response.headers.has('cf-ray');
+	const isCloudflare = await cloudflare;
 
 	let text: string;
 	try {
@@ -92,5 +164,10 @@ export async function checkSite(domain: string): Promise<CheckResult> {
 	}
 
 	const outcome = classifyResponse(httpStatus, text);
-	return { outcome, httpStatus, isCloudflare, body: outcome === 'ok' ? cleanRobots(text) : null };
+	return {
+		outcome,
+		httpStatus,
+		isCloudflare,
+		body: outcome === 'ok' ? cleanRobots(text) : null,
+	};
 }

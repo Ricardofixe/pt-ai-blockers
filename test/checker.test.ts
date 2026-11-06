@@ -1,7 +1,7 @@
 // tests for the checker's helper functions
 
 import { describe, it, expect } from 'vitest';
-import { classifyResponse, cleanRobots, sha256 } from '../src/checker';
+import { classifyResponse, cleanRobots, sha256, isCloudflareIp, cloudflareFromIps } from '../src/checker';
 
 describe('classifyResponse', () => {
 	//1
@@ -87,5 +87,34 @@ describe('sha256', () => {
 		const a = await sha256(cleanRobots('User-agent: *\r\nDisallow: /'));
 		const b = await sha256(cleanRobots('User-agent: *\nDisallow: /  '));
 		expect(a).toBe(b);
+	});
+});
+
+describe('isCloudflareIp', () => {
+	//14
+	it("recognises addresses inside Cloudflare's ranges, including at their edges", () => {
+		expect(isCloudflareIp('104.16.132.229')).toBe(true); // 104.16.0.0/13
+		expect(isCloudflareIp('172.67.10.1')).toBe(true); // 172.64.0.0/13 covers 172.64 to 172.71
+		expect(isCloudflareIp('162.159.255.255')).toBe(true); // last address of 162.158.0.0/15
+		expect(isCloudflareIp('104.24.0.0')).toBe(true); // first address of 104.24.0.0/14
+	});
+
+	//15
+	it('rejects other addresses, including just outside a range, and invalid ones', () => {
+		expect(isCloudflareIp('8.8.8.8')).toBe(false);
+		expect(isCloudflareIp('104.28.0.1')).toBe(false); // just past 104.24.0.0/14
+		expect(isCloudflareIp('162.160.0.0')).toBe(false); // just past 162.158.0.0/15
+		expect(isCloudflareIp('256.1.1.1')).toBe(false);
+		expect(isCloudflareIp('not-an-ip')).toBe(false);
+	});
+});
+
+describe('cloudflareFromIps', () => {
+	//16
+	it('is true if any address is Cloudflare, false if none, null if unknown', () => {
+		expect(cloudflareFromIps(['8.8.8.8', '104.16.1.1'])).toBe(true);
+		expect(cloudflareFromIps(['8.8.8.8'])).toBe(false);
+		expect(cloudflareFromIps([])).toBeNull(); // no IPv4 address
+		expect(cloudflareFromIps(null)).toBeNull(); // lookup failed
 	});
 });

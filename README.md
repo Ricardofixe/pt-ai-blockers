@@ -35,7 +35,7 @@ The sample is small, so read the percentages as indicative. The checker runs dai
 flowchart LR
     cron["Cron trigger<br/>6 runs, 06:00–06:50 UTC"] --> worker
     subgraph worker["Cloudflare Worker"]
-        sync["Sync site & bot lists"] --> pick["Pick up to 25 sites<br/>not checked today"]
+        sync["Sync site & bot lists"] --> pick["Pick up to 20 sites<br/>not checked today"]
         pick --> fetch["Fetch robots.txt<br/>(in parallel)"]
         fetch --> parse["Classify · clean · hash<br/>parse · verdict per bot"]
     end
@@ -44,7 +44,7 @@ flowchart LR
     api --> page["Dashboard<br/>(static assets)"]
 ```
 
-1. **Schedule.** A cron trigger runs the Worker six times each morning. Each run checks up to 25 sites that haven't been checked that day, so three runs cover all 69 and three are spare.
+1. **Schedule.** A cron trigger runs the Worker six times each morning. Each run checks up to 20 sites that haven't been checked that day, so four runs cover all 69 and two are spare.
 2. **Fetch.** Each site's `https://<host>/robots.txt` is fetched with an honest User-Agent, a 10-second timeout and redirects followed. The response is classified between a real robots.txt, no file (404), a server error, unreachable, or something that isn't a robots.txt (usually a bot check).
 3. **Parse.** The file is cleaned (line endings, whitespace, byte-order mark), hashed with SHA-256 and parsed into groups. For each of the 17 bots, the checker decides: **blocked**, **partly blocked** or **allowed**.
 4. **Store.** Results go into D1 in one transaction. Each unique file is stored once, and each site's history is a list of periods during which nothing changed.
@@ -52,7 +52,7 @@ flowchart LR
 
 ## Engineering decisions
 
-**Fitting the free plan.** A Worker run on the free plan gets 50 subrequests, 10 ms of CPU and 6 concurrent connections, and checking 69 sites in one run doesn't fit. So each run does exactly 4 database calls plus at most 25 fetches (29 subrequests), and writes everything in a single `db.batch()`, which counts as one query and is one transaction. The batches are **self-healing**: "not checked today" is derived from the data itself, so if a run fails, the next one picks up whatever is left.
+**Fitting the free plan.** A Worker run on the free plan gets 50 subrequests, 10 ms of CPU and 6 concurrent connections, and checking 69 sites in one run doesn't fit. So each run does exactly 4 database calls plus at most 40 fetches (44 subrequests, one robots.txt request and one DNS lookup per site), and writes everything in a single `db.batch()`, which counts as one query and is one transaction. The batches are **self-healing**: "not checked today" is derived from the data itself, so if a run fails, the next one picks up whatever is left.
 
 **Storing changes, not snapshots.** Saving every file every day would store the same thing thousands of times. Instead, each file is content-addressed by its SHA-256 hash and stored once, its verdicts are computed once, and each site's history is a set of **periods** (`first_seen`, `last_seen`) that only split when something changes. A period is only extended if the site was also seen the day before, so days the checker missed show up as gaps instead of being silently covered. Because the raw files are kept, every verdict can be recomputed after a parser fix without refetching anything.
 
@@ -69,7 +69,7 @@ flowchart LR
 - **It measures what sites ask, not what bots do.** robots.txt is a request. Some bots that act on a user's behalf say it may not apply to them, and some crawlers ignore it.
 - **Bot purposes come from each operator's documentation** ([`src/bots.ts`](src/bots.ts) links every source). Google-Extended and Applebot-Extended aren't crawlers, they're tokens that opt content out of AI training while normal crawling continues. Bots with no public documentation (Bytespider) are classified from secondary sources and marked as such.
 - **Blocked / partly blocked / allowed.** _Blocked_: the bot may not access `/` and nothing is allowed back. _Partly_: the root is blocked with some paths allowed back, or the bot's own rules block specific sections. Generic rules for every bot (like `/admin/`) don't count. A site "blocks a purpose" if it blocks at least one current bot of that kind.
-- **Cloudflare detection** means the response carried a `cf-ray` header, i.e. it was served through Cloudflare's proxy. Sites using Cloudflare only for DNS count as not on Cloudflare, and network-level bot blocking isn't visible in robots.txt.
+- **Cloudflare detection** checks whether the site's IP addresses are in Cloudflare's published ranges, which means it's served through Cloudflare's proxy. An earlier version used the `cf-ray` response header, which works from a normal computer but not from a Worker, because the Worker's own requests pass through Cloudflare. Sites using Cloudflare only for DNS count as not on Cloudflare, and network-level bot blocking isn't visible in robots.txt.
 - **The sample** is 69 sites chosen for reach and coverage of sectors: national news media, TV and radio, sports media, clubs and governing bodies, tech and lifestyle sites, universities and public institutions. Groups are small (10–15 sites), so one site can move a sector's number noticeably.
 
 ## Project structure
@@ -95,7 +95,7 @@ Requires Node.js and a Cloudflare account (the free plan is enough).
 npm install
 npx wrangler d1 create pt-ai-blockers            # put the printed database_id in wrangler.jsonc
 npx wrangler d1 migrations apply pt-ai-blockers --local
-npm test                                          # 66 tests
+npm test                                          # 69 tests
 npx wrangler dev --test-scheduled                 # then open /__scheduled to run a batch
 ```
 
@@ -103,7 +103,7 @@ Open `/__scheduled` once per batch (three times for all sites), then open the ro
 
 ## Tests
 
-66 unit tests, written mostly before the code they cover:
+69 unit tests, written mostly before the code they cover:
 
 - **Parser:** every grouping rule above, plus messy input (comments inside paths, `\r\n`, garbage lines, colons in paths, wildcards kept verbatim).
 - **Verdicts:** named group vs `*`, merged groups, version suffixes, exact-name matching (`Applebot` ≠ `Applebot-Extended`), the RFC's tie rule (`Allow: /` cancels `Disallow: /`).

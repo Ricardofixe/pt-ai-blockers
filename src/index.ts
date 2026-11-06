@@ -1,7 +1,7 @@
 import { runBatch } from './run';
 import { loadReport, toCsv } from './report';
 
-const BATCH_SIZE = 25; // sites per run, see the cron schedule in wrangler.jsonc
+const BATCH_SIZE = 20; // sites per run, see the cron schedule in wrangler.jsonc
 const CACHE = 'public, max-age=300'; // browsers and Cloudflare may reuse a response for 5 minutes
 
 export default {

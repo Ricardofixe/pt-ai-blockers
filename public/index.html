@@ -575,9 +575,8 @@
 							"allowed". A site with no robots.txt at all (404) counts as allowing every bot, as the standard says.
 						</li>
 						<li>
-							<strong>Cloudflare.</strong> A site counts as using Cloudflare if its response carries Cloudflare's
-							<code>cf-ray</code> header. "Managed robots.txt" means the file contains the section Cloudflare adds automatically for its
-							customers.
+							<strong>Cloudflare.</strong> A site counts as using Cloudflare if its IP addresses are in Cloudflare's published ranges.
+							"Managed robots.txt" means the file contains the section Cloudflare adds automatically for its customers.
 						</li>
 						<li>
 							<strong>Sample.</strong> Around 70 Portuguese sites: national news media, broadcasters, sports media and clubs, tech and

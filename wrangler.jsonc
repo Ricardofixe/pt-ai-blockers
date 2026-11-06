@@ -24,7 +24,7 @@
   ],
   "triggers": {
     // every 10 minutes from 06:00 to 06:50 UTC
-    // 69 sites need 3 runs total (at 25 sites per run), the other 3 are spare, in case a run fails
+    // 69 sites need 4 runs total (at 20 sites per run), the other 2 are spare, in case a run fails
     "crons": ["*/10 6 * * *"],
   },
   /**
