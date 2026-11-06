@@ -16,16 +16,17 @@ It's a problem every company has learned to live with, and nobody is measuring i
 
 **PT AI Blockers** checks the `robots.txt` of 69 major Portuguese websites every morning, reads it the way a crawler would, and publishes what each site asks of 17 AI bots.
 
-## What the first check found
+## What the checker found
 
-_4 November 2026. 64 of 69 sites could be read, the other 5 answered with bot checks or errors and are left out of the percentages._
+_6 November 2026, from the live Worker. 59 of 69 sites could be read, the other 10 answered with bot checks (8) or server errors (2) and are left out of the percentages._
 
-- **28% fully block at least one AI training bot** (18 of 64), and 2 more block one partly.
-- **It's a media decision.** Half of the broadcasters (5 of 10) and sports sites (5 of 10), and 6 of 14 news sites, block AI training. Public institutions: **0 of 8**. Universities: **1 of 12**. Four public institutions (gov.pt, Portal das Finanças, INE and the Parliament) have no `robots.txt` at all, which under the standard allows every crawler.
+- **31% fully block at least one AI training bot** (18 of 59), and 1 more blocks one partly.
+- **It's a media decision.** More than half of the readable broadcasters (5 of 9) and sports sites (5 of 9), and 6 of 14 news sites, block AI training. Public institutions: **0 of 7**. Universities: **1 of 10**. Four public institutions (gov.pt, Portal das Finanças, INE and the Parliament) have no `robots.txt` at all, and SNS answers with an error (405). Under the standard, both count as allowing every crawler.
 - **Block training, keep search.** 10 sites block AI training but leave AI search bots allowed, while no site does the opposite. 8 block OpenAI's training crawler (GPTBot) while allowing its search crawler (OAI-SearchBot), so they are out of the training data, but still citable in ChatGPT's answers.
-- **OpenAI is blocked twice as often as Anthropic.** GPTBot is blocked by 16 sites, ClaudeBot by 8. ChatGPT-User is the most-blocked bot that acts on a user's request (12 sites), often the only one a site names, even though OpenAI says robots.txt may not apply to it.
-- **Copied blocklists.** 9 sites still list Anthropic's retired bot names (`anthropic-ai`, `Claude-Web`). All of them also block the current ClaudeBot, so the old entries are leftovers from shared lists rather than gaps.
-- **Cloudflare.** 19 of 68 sites are served through Cloudflare. Among readable ones, 8 of 18 (44%) block AI training, against 10 of 46 (22%) elsewhere. 4 use Cloudflare's managed robots.txt, and all 4 declare the same Content Signal: `search=yes, ai-train=no, use=reference`.
+- **OpenAI is blocked twice as often as Anthropic.** GPTBot is blocked by 16 sites (and partly by 2 more), ClaudeBot by 8. ChatGPT-User is the most-blocked bot that acts on a user's request (12 sites), and 7 of those sites block no other bot of that kind, even though OpenAI says robots.txt may not apply to it.
+- **Copied blocklists.** 8 sites still list Anthropic's retired bot names (`anthropic-ai`, `Claude-Web`). All of them also block the current ClaudeBot, so the old entries are leftovers from shared lists rather than gaps.
+- **Cloudflare.** 19 of 69 sites are served through Cloudflare. Among readable ones, 8 of 15 (53%) block AI training, against 10 of 44 (23%) elsewhere. 3 use Cloudflare's managed robots.txt, and all 3 declare the same Content Signal: `search=yes, ai-train=no, use=reference`.
+- **A block that did nothing.** Observador used Cloudflare's managed robots.txt until 5 November, when the managed section disappeared from its file. That section disallowed AI training bots, but Observador's own rules gave the same bots `Allow: /`. Under RFC 9309 a bot's groups are merged and `Allow` wins a tie, so the block never applied, and removing it changed none of Observador's verdicts.
 
 The sample is small, so read the percentages as indicative. The checker runs daily, so the dashboard also builds a history of when sites change their policies.
 
@@ -70,6 +71,7 @@ flowchart LR
 - **Bot purposes come from each operator's documentation** ([`src/bots.ts`](src/bots.ts) links every source). Google-Extended and Applebot-Extended aren't crawlers, they're tokens that opt content out of AI training while normal crawling continues. Bots with no public documentation (Bytespider) are classified from secondary sources and marked as such.
 - **Blocked / partly blocked / allowed.** _Blocked_: the bot may not access `/` and nothing is allowed back. _Partly_: the root is blocked with some paths allowed back, or the bot's own rules block specific sections. Generic rules for every bot (like `/admin/`) don't count. A site "blocks a purpose" if it blocks at least one current bot of that kind.
 - **Cloudflare detection** checks whether the site's IP addresses are in Cloudflare's published ranges, which means it's served through Cloudflare's proxy. An earlier version used the `cf-ray` response header, which works from a normal computer but not from a Worker, because the Worker's own requests pass through Cloudflare. Sites using Cloudflare only for DNS count as not on Cloudflare, and network-level bot blocking isn't visible in robots.txt.
+- **Some sites refuse the Worker.** Requests from a Worker come from Cloudflare's network, and some sites turn those away. 6 sites that could be read from a home connection on 4 November (among them Público and two universities) answer the Worker with a bot check or an error, so fewer sites are readable in production than in a local run.
 - **The sample** is 69 sites chosen for reach and coverage of sectors: national news media, TV and radio, sports media, clubs and governing bodies, tech and lifestyle sites, universities and public institutions. Groups are small (10–15 sites), so one site can move a sector's number noticeably.
 
 ## Project structure
@@ -99,7 +101,7 @@ npm test                                          # 69 tests
 npx wrangler dev --test-scheduled                 # then open /__scheduled to run a batch
 ```
 
-Open `/__scheduled` once per batch (three times for all sites), then open the root URL for the dashboard. To deploy: `npx wrangler d1 migrations apply pt-ai-blockers --remote`, then `npm run deploy`.
+Open `/__scheduled` once per batch (four times for all sites), then open the root URL for the dashboard. To deploy: `npx wrangler d1 migrations apply pt-ai-blockers --remote`, then `npm run deploy`.
 
 ## Tests
 
